@@ -11,7 +11,7 @@ $breadcrumbs = [
 @endphp
 
 @section('content')
-<div class="space-y-6">
+<div class="space-y-6" x-data="{ showUploadModal: false }">
     <!-- Header con acciones -->
     <div class="lg:flex lg:items-center lg:justify-between">
         <div class="flex-1 min-w-0">
@@ -415,11 +415,9 @@ $breadcrumbs = [
             @endif
         </div>
     </div>
-</div>
-
-<!-- Modal para subir documentos -->
+    <!-- Modal para subir documentos -->
 @can('uploadDocument', $permission)
-<div x-data="{ showUploadModal: false }" x-show="showUploadModal" 
+<div x-show="showUploadModal"
      x-transition:enter="ease-out duration-300"
      x-transition:enter-start="opacity-0"
      x-transition:enter-end="opacity-100"
@@ -478,6 +476,9 @@ $breadcrumbs = [
     </div>
 </div>
 @endcan
+
+</div>
+
 
 @php
 function getStatusColor($status) {

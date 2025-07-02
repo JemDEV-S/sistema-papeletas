@@ -18,7 +18,8 @@ $breadcrumbs = [
         <p class="mt-2 text-sm text-gray-700">Complete el formulario para solicitar un permiso laboral</p>
     </div>
 
-    <form @submit.prevent="submitForm()" class="space-y-6">
+    <!-- Formulario HTML tradicional -->
+    <form action="{{ route('permissions.store') }}" method="POST" class="space-y-6">
         @csrf
 
         <!-- Información del solicitante -->
@@ -69,7 +70,9 @@ $breadcrumbs = [
                             required>
                         <option value="">Seleccione un tipo de permiso</option>
                         @foreach($permissionTypes as $type)
-                        <option value="{{ $type->id }}">{{ $type->name }}</option>
+                        <option value="{{ $type->id }}" {{ old('permission_type_id') == $type->id ? 'selected' : '' }}>
+                            {{ $type->name }}
+                        </option>
                         @endforeach
                     </select>
                     @error('permission_type_id')
@@ -136,8 +139,9 @@ $breadcrumbs = [
                         <input type="datetime-local" 
                                id="start_datetime" 
                                name="start_datetime"
+                               value="{{ old('start_datetime') }}"
                                x-model="startDateTime"
-                               @change="calculateHours()"
+                               @change="calculateHoursWithoutAPI()"
                                :min="minDateTime"
                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                                required>
@@ -153,8 +157,9 @@ $breadcrumbs = [
                         <input type="datetime-local" 
                                id="end_datetime" 
                                name="end_datetime"
+                               value="{{ old('end_datetime') }}"
                                x-model="endDateTime"
-                               @change="calculateHours()"
+                               @change="calculateHoursWithoutAPI()"
                                :min="startDateTime"
                                class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                                required>
@@ -187,7 +192,7 @@ $breadcrumbs = [
                               x-model="reason"
                               class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                               placeholder="Describa el motivo de su solicitud..."
-                              required></textarea>
+                              required>{{ old('reason') }}</textarea>
                     <p class="mt-2 text-sm text-gray-500">
                         <span x-text="reason.length"></span>/500 caracteres
                     </p>
@@ -204,9 +209,9 @@ $breadcrumbs = [
                                 name="priority"
                                 x-model="priority"
                                 class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
-                            <option value="3">Baja</option>
-                            <option value="2" selected>Normal</option>
-                            <option value="1">Alta</option>
+                            <option value="3" {{ old('priority', '2') == '3' ? 'selected' : '' }}>Baja</option>
+                            <option value="2" {{ old('priority', '2') == '2' ? 'selected' : '' }}>Normal</option>
+                            <option value="1" {{ old('priority', '2') == '1' ? 'selected' : '' }}>Alta</option>
                         </select>
                     </div>
 
@@ -214,6 +219,8 @@ $breadcrumbs = [
                         <input id="is_urgent" 
                                name="is_urgent"
                                type="checkbox"
+                               value="1"
+                               {{ old('is_urgent') ? 'checked' : '' }}
                                x-model="isUrgent"
                                class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
                         <label for="is_urgent" class="ml-2 block text-sm font-medium text-gray-700">
@@ -232,7 +239,7 @@ $breadcrumbs = [
                               rows="2"
                               x-model="additionalInfo"
                               class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                              placeholder="Información adicional relevante (opcional)..."></textarea>
+                              placeholder="Información adicional relevante (opcional)...">{{ old('additional_info') }}</textarea>
                     @error('additional_info')
                     <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
                     @enderror
@@ -287,11 +294,7 @@ $breadcrumbs = [
                     :disabled="!isFormValid()"
                     :class="isFormValid() ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500' : 'bg-gray-300 cursor-not-allowed'"
                     class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white focus:outline-none focus:ring-2 focus:ring-offset-2">
-                <svg x-show="loading" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span x-text="loading ? 'Guardando...' : 'Crear Solicitud'"></span>
+                Crear Solicitud
             </button>
         </div>
     </form>
@@ -300,18 +303,47 @@ $breadcrumbs = [
 <script>
 function permissionRequestForm() {
     return {
-        selectedPermissionType: '',
+        selectedPermissionType: '{{ old('permission_type_id', '') }}',
         permissionTypeInfo: null,
         permissionBalance: null,
-        startDateTime: '',
-        endDateTime: '',
+        startDateTime: '{{ old('start_datetime', '') }}',
+        endDateTime: '{{ old('end_datetime', '') }}',
         calculatedHours: 0,
-        reason: '',
-        priority: '2',
-        isUrgent: false,
-        additionalInfo: '',
-        loading: false,
-        minDateTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 16), // 2 horas desde ahora
+        reason: '{{ old('reason', '') }}',
+        priority: '{{ old('priority', '2') }}',
+        isUrgent: {{ old('is_urgent') ? 'true' : 'false' }},
+        additionalInfo: '{{ old('additional_info', '') }}',
+        
+        init() {
+            // Si hay un tipo de permiso seleccionado (por old input), cargar sus detalles
+            if (this.selectedPermissionType) {
+                this.loadPermissionTypeDetails();
+            }
+            
+            // Calcular horas si hay fechas pre-seleccionadas
+            if (this.startDateTime && this.endDateTime) {
+                this.calculateHoursWithoutAPI();
+            }
+        },
+        
+        // Función helper para obtener fecha/hora local en formato correcto
+        getLocalDateTimeString(addHours = 0) {
+            const now = new Date();
+            now.setHours(now.getHours() + addHours);
+            
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            
+            return `${year}-${month}-${day}T${hours}:${minutes}`;
+        },
+
+        // Inicializar minDateTime correctamente
+        get minDateTime() {
+            return this.getLocalDateTimeString(2); // 2 horas desde ahora
+        },
 
         async loadPermissionTypeDetails() {
             if (!this.selectedPermissionType) {
@@ -328,34 +360,30 @@ function permissionRequestForm() {
                 this.permissionBalance = data.balance;
             } catch (error) {
                 console.error('Error loading permission type details:', error);
+                // En caso de error, no impedir el envío del formulario
             }
         },
 
-        async calculateHours() {
+        // Función simplificada para calcular horas sin API
+        calculateHoursWithoutAPI() {
             if (!this.startDateTime || !this.endDateTime) {
                 this.calculatedHours = 0;
                 return;
             }
 
-            try {
-                const response = await fetch('/permissions/api/calculate-hours', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
-                    body: JSON.stringify({
-                        start_datetime: this.startDateTime,
-                        end_datetime: this.endDateTime
-                    })
-                });
-
-                const data = await response.json();
-                this.calculatedHours = data.hours;
-            } catch (error) {
-                console.error('Error calculating hours:', error);
+            const start = new Date(this.startDateTime);
+            const end = new Date(this.endDateTime);
+            
+            if (end <= start) {
                 this.calculatedHours = 0;
+                return;
             }
+
+            // Calcular diferencia en milisegundos y convertir a horas
+            const diffMs = end - start;
+            const diffHours = Math.round((diffMs / (1000 * 60 * 60)) * 100) / 100; // Redondear a 2 decimales
+            
+            this.calculatedHours = diffHours;
         },
 
         isFormValid() {
@@ -364,43 +392,6 @@ function permissionRequestForm() {
                    this.endDateTime && 
                    this.reason.length >= 10 && 
                    this.calculatedHours > 0;
-        },
-
-        async submitForm() {
-            if (!this.isFormValid()) return;
-
-            this.loading = true;
-            
-            try {
-                const formData = new FormData();
-                formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
-                formData.append('permission_type_id', this.selectedPermissionType);
-                formData.append('start_datetime', this.startDateTime);
-                formData.append('end_datetime', this.endDateTime);
-                formData.append('reason', this.reason);
-                formData.append('priority', this.priority);
-                formData.append('is_urgent', this.isUrgent ? '1' : '0');
-                formData.append('additional_info', this.additionalInfo);
-
-                const response = await fetch('{{ route("permissions.store") }}', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    window.location.href = result.redirect || '{{ route("permissions.index") }}';
-                } else {
-                    const errorData = await response.json();
-                    console.error('Validation errors:', errorData.errors);
-                    // Aquí puedes mostrar los errores de validación
-                }
-            } catch (error) {
-                console.error('Error submitting form:', error);
-                alert('Error al crear la solicitud. Por favor, inténtelo nuevamente.');
-            } finally {
-                this.loading = false;
-            }
         },
 
         getDocumentName(docType) {
